@@ -27,6 +27,9 @@ import net.runelite.client.game.ItemManager;
 import net.runelite.client.plugins.Plugin;
 import net.runelite.client.plugins.PluginDescriptor;
 import net.runelite.client.ui.overlay.OverlayManager;
+import net.runelite.api.GameState;
+import net.runelite.api.events.GameStateChanged;
+
 
 import javax.inject.Inject;
 import java.util.HashSet;
@@ -65,8 +68,7 @@ public class LootLedgerPlugin extends Plugin
         ItemIdIndex.load();
         accountManager.init();
         dropFetcher.startUp();
-        dropCache.startUp();
-        obtainedItems.load();
+        eventBus.register(this);
         eventBus.register(accountManager);
         eventBus.register(tabListener);
         eventBus.register(dropsMenuListener);
@@ -84,6 +86,16 @@ public class LootLedgerPlugin extends Plugin
         overlayManager.remove(dropsTooltipOverlay);
         dropCache.shutdown();
         dropFetcher.shutdown();
+    }
+
+    @Subscribe
+    public void onGameStateChanged(GameStateChanged e)
+    {
+        if (e.getGameState() == GameState.LOGGED_IN)
+        {
+            try { dropCache.startUp(); } catch (Exception ex) { log.error("dropCache.startUp failed", ex); }
+            try { obtainedItems.load(); } catch (Exception ex) { log.error("obtainedItems.load failed", ex); }
+        }
     }
 
     // Refresh the viewer live when relevant config toggles change

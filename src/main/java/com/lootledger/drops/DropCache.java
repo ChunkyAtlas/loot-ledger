@@ -60,10 +60,11 @@ public class DropCache
      */
     public void startUp()
     {
+        String player = accountManager.getPlayerName();
+        if (player == null || player.isEmpty()) { return; }
         loadIndex();
         pruneOldCaches();
     }
-
     /**
      * Load from disk if possible; otherwise fetch from the wiki, write the
      * JSON, and return the data. Results without droptable sections are

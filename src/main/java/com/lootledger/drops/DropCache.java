@@ -5,6 +5,7 @@ import static net.runelite.client.RuneLite.RUNELITE_DIR;
 import com.lootledger.account.AccountManager;
 import com.google.gson.Gson;
 import lombok.extern.slf4j.Slf4j;
+import com.google.common.util.concurrent.ThreadFactoryBuilder;
 
 import javax.inject.Inject;
 import javax.inject.Singleton;
@@ -19,6 +20,8 @@ import java.time.Instant;
 import java.util.*;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.TimeUnit;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
 
@@ -39,6 +42,10 @@ public class DropCache
     private final Map<Path, NpcDropData> cache = new ConcurrentHashMap<>();
     private final Map<String, Path> nameIndex = new ConcurrentHashMap<>();
     private volatile boolean indexLoaded = false;
+    private final ExecutorService ioExecutor = java.util.concurrent.Executors.newFixedThreadPool(
+            Math.max(2, Runtime.getRuntime().availableProcessors() / 2),
+            new ThreadFactoryBuilder().setNameFormat("dropcache-io-%d").build()
+    );
 
     @Inject
     public DropCache(Gson gson, AccountManager accountManager, DropFetcher dropFetcher)
@@ -98,7 +105,7 @@ public class DropCache
                 removeIndex(file);
             }
             return null;
-        }).thenCompose(cached ->
+        }, ioExecutor).thenComposeAsync(cached ->
         {
             if (cached != null)
             {
@@ -106,7 +113,7 @@ public class DropCache
             }
 
             return dropFetcher.fetch(npcId, name, level)
-                    .thenApply(data ->
+                    .thenApplyAsync(data ->
                     {
                         try
                         {
@@ -159,13 +166,13 @@ public class DropCache
                             log.error("Failed to write cache file for {}", name, e);
                         }
                         return data;
-                    })
+                    }, ioExecutor)
                     .exceptionally(ex ->
                     {
                         log.error("Error fetching drop data for NPC {}", npcId, ex);
                         return null;
                     });
-        });
+        },ioExecutor);
     }
 
     /**
@@ -202,11 +209,11 @@ public class DropCache
             }
             catch (Exception ex)
             {
-                log.debug("Wiki search failed for {}", query, ex);
+                log.error("Wiki search failed for {}", query, ex);
             }
 
             return new ArrayList<>(names);
-        });
+        }, ioExecutor);
     }
 
     private boolean isFresh(Path file)
@@ -301,13 +308,13 @@ public class DropCache
                         }
                         catch (IOException ex)
                         {
-                            log.debug("Failed to delete old drop cache {}", p, ex);
+                            log.error("Failed to delete old drop cache {}", p, ex);
                         }
                     });
         }
         catch (IOException ex)
         {
-            log.debug("Error pruning drop cache directory {}", dir, ex);
+            log.error("Error pruning drop cache directory {}", dir, ex);
         }
     }
 
@@ -338,13 +345,13 @@ public class DropCache
                             }
                             catch (IOException ex)
                             {
-                                log.debug("Failed to delete drop cache {}", p, ex);
+                                log.error("Failed to delete drop cache {}", p, ex);
                             }
                         });
             }
             catch (IOException ex)
             {
-                log.debug("Error clearing drop cache directory {}", dir, ex);
+                log.error("Error clearing drop cache directory {}", dir, ex);
             }
         }
 
@@ -406,7 +413,7 @@ public class DropCache
                             }
                             catch (Exception e)
                             {
-                                log.warn("Skipping bad cache file {}", p, e);
+                                log.error("Skipping bad cache file {}", p, e);
                                 Files.deleteIfExists(p);
                             }
                         }
@@ -415,11 +422,33 @@ public class DropCache
             }
             catch (IOException e)
             {
-                log.debug("Error loading cache index", e);
+                log.error("Error loading cache index", e);
             }
             indexLoaded = true;
         }
     }
+
+    public void shutdown()
+    {
+        ioExecutor.shutdown();
+        try
+        {
+            if (!ioExecutor.awaitTermination(3, TimeUnit.SECONDS))
+            {
+                ioExecutor.shutdownNow();
+                if (!ioExecutor.awaitTermination(2, TimeUnit.SECONDS))
+                {
+                    log.warn("dropcache-io executor did not terminate cleanly");
+                }
+            }
+        }
+        catch (InterruptedException ie)
+        {
+            ioExecutor.shutdownNow();
+            Thread.currentThread().interrupt();
+        }
+    }
+
 
     private String buildNameKey(String name, int level)
     {

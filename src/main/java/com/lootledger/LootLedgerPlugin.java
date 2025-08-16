@@ -82,6 +82,7 @@ public class LootLedgerPlugin extends Plugin
         eventBus.unregister(tabListener);
         eventBus.unregister(dropsMenuListener);
         overlayManager.remove(dropsTooltipOverlay);
+        dropCache.shutdown();
         dropFetcher.shutdown();
     }
 

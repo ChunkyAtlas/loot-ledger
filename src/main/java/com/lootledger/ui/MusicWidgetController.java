@@ -69,7 +69,7 @@ public class MusicWidgetController
         this.client = client;
         this.clientThread = clientThread;
         this.obtainedItemsManager = obtainedItemsManager;
-        this.accountManager = accountManager; // ensure assigned
+        this.accountManager = accountManager;
         this.spriteOverrideManager = spriteOverrideManager;
         this.itemSpriteCache = itemSpriteCache;
         this.config = config;
@@ -353,15 +353,17 @@ public class MusicWidgetController
             );
             if (query == null || query.trim().isEmpty()) { return; }
 
-            new Thread(() -> {
-                List<NpcDropData> results = searchService.search(query.trim());
+            final String q = query.trim();
+            if (q.isEmpty()) { return; }
+            Thread t = new Thread(() -> {
+                List<NpcDropData> results = searchService.search(q);
 
                 SwingUtilities.invokeLater(() -> {
                     if (results.isEmpty())
                     {
                         JOptionPane.showMessageDialog(
                                 null,
-                                "No NPCs found for: " + query,
+                                "No NPCs found for: " + q,
                                 "Search NPC",
                                 JOptionPane.INFORMATION_MESSAGE
                         );
@@ -387,7 +389,9 @@ public class MusicWidgetController
                         override(limited.get(idx));
                     }
                 });
-            }).start();
+            },"lootledger-search");
+            t.setDaemon(true);
+            t.start();
         });
     }
 
@@ -400,7 +404,7 @@ public class MusicWidgetController
         if (backupScrollStaticKids == null) { backupScrollStaticKids = copyChildren(scrollable, false); }
         if (backupScrollDynamicKids == null) { backupScrollDynamicKids = copyChildren(scrollable, true); }
 
-        WidgetUtils.hideAllChildrenSafely(jukebox);
+        if (jukebox != null) WidgetUtils.hideAllChildrenSafely(jukebox);
         WidgetUtils.hideAllChildrenSafely(scrollable);
 
         boolean trackingOn = isTracking();
@@ -452,17 +456,10 @@ public class MusicWidgetController
 
         final ObtainedItemsManager.Scope scope = mapScope(config.obtainedScope());
         final int npcId = currentDrops.getNpcId();
-
         boolean already = obtainedItemsManager.isObtained(account, npcId, itemId, scope);
         if (already)
         {
-            // Requires ObtainedItemsManager#unmarkObtained
-            try { obtainedItemsManager.getClass().getMethod("unmarkObtained", String.class, int.class, int.class, ObtainedItemsManager.Scope.class);
-                obtainedItemsManager.unmarkObtained(account, npcId, itemId, scope);
-            } catch (NoSuchMethodException nsme) {
-                // Fallback path if method not present yet: do nothing but log once.
-                log.warn("unmarkObtained(...) not found on ObtainedItemsManager; please update that class.");
-            }
+            obtainedItemsManager.unmarkObtained(account, npcId, itemId, scope);
         }
         else
         {

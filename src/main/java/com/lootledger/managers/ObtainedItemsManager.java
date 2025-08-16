@@ -16,6 +16,8 @@ import java.text.SimpleDateFormat;
 import java.util.*;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
+import java.util.concurrent.ScheduledExecutorService;
+import java.util.concurrent.ScheduledFuture;
 
 import static net.runelite.client.RuneLite.RUNELITE_DIR;
 
@@ -34,7 +36,20 @@ public class ObtainedItemsManager
     @Inject private AccountManager accountManager;
     @Inject private Gson gson;
 
-    private final ExecutorService io = Executors.newSingleThreadExecutor();
+    private final ExecutorService io =
+            Executors.newSingleThreadExecutor(r -> {
+                Thread t = new Thread(r, "obtained-io");
+                t.setDaemon(true);
+                return t;
+            });
+    private final ScheduledExecutorService scheduler =
+            Executors.newSingleThreadScheduledExecutor(r -> {
+                Thread t = new Thread(r, "obtained-flush");
+                t.setDaemon(true);
+                return t;
+            });
+    private volatile ScheduledFuture<?> pendingFlush;
+    private static final long FLUSH_DELAY_MS = 300;
 
     // In-memory state keyed by account. Only ever load/save the current account.
     private final Map<String, AccountRecord> data = Collections.synchronizedMap(new LinkedHashMap<>());
@@ -52,7 +67,7 @@ public class ObtainedItemsManager
     {
         final String account = accountManager.getPlayerName();
         if (account == null || account.isEmpty()) {
-            log.debug("ObtainedItemsManager.load: no account yet");
+            log.error("ObtainedItemsManager.load: no account yet");
             return;
         }
 
@@ -124,6 +139,15 @@ public class ObtainedItemsManager
         }
     }
 
+    private synchronized void requestFlush()
+    {
+        if (pendingFlush != null) {
+            pendingFlush.cancel(false);
+            pendingFlush = null;
+        }
+        pendingFlush = scheduler.schedule(this::save, FLUSH_DELAY_MS, java.util.concurrent.TimeUnit.MILLISECONDS);
+    }
+
     private static void safeMove(Path source, Path target, CopyOption... opts) throws IOException
     {
         try {
@@ -182,7 +206,7 @@ public class ObtainedItemsManager
         } else {
             r.npcs.computeIfAbsent(npcId, x -> Collections.synchronizedSet(new LinkedHashSet<>())).add(itemId);
         }
-        save();
+        requestFlush();
     }
 
     public synchronized void unmarkObtained(String account, int npcId, int itemId, Scope scope)
@@ -199,7 +223,7 @@ public class ObtainedItemsManager
                 }
             }
         }
-        save();
+        requestFlush();
     }
 
     /** Toggle obtained state; returns the new state (true if now obtained). */
@@ -229,20 +253,20 @@ public class ObtainedItemsManager
 
     public void shutdown()
     {
+        // flush any pending debounced writes
+        final ScheduledFuture<?> pf = pendingFlush;
+        if (pf != null) { pf.cancel(false); }
+
         // final synchronous save so we don't lose anything
         final String account = accountManager.getPlayerName();
         if (account != null && !account.isEmpty())
         {
-            final AccountRecord rec;
-            synchronized (this)
-            {
-                rec = data.getOrDefault(account, new AccountRecord());
-            }
-            // Synchronous write (does not use the executor)
-            doSave(account, rec);
+            save(); // enqueues to io; we'll await termination below
         }
 
-        // stop the background IO thread
+        // stop scheduler first so no new tasks get queued
+        scheduler.shutdown();
+
         io.shutdown();
         try
         {

@@ -48,8 +48,6 @@ public class DropFetcher
         this.httpClient = httpClient;
         this.itemManager  = itemManager;
         this.clientThread = clientThread;
-        // NOTE: Do NOT call ItemIdIndex.load() here — the plugin sets Gson and loads it in startUp().
-        startUp();
     }
 
     /**
@@ -128,7 +126,9 @@ public class DropFetcher
                     return itemManager.canonicalize(id);
                 }
             }
-        } catch (Exception ignored) {}
+        } catch (Exception ex) {
+            log.warn("ItemManager search failed for {}", itemName, ex);
+        }
 
         return 0;
     }
@@ -194,7 +194,9 @@ public class DropFetcher
                         if (part != null && part.length() > 0) {
                             try {
                                 return Integer.parseInt(part);
-                            } catch (NumberFormatException ignore) {}
+                            } catch (NumberFormatException nfe) {
+                                log.error("Failed to parse number in drop table", nfe);
+                            }
                         }
                     }
                 }
@@ -243,11 +245,11 @@ public class DropFetcher
                 }
             }
 
-            log.warn("No page ID found for title {}", title);
+            log.error("No page ID found for title {}", title);
         }
         catch (IOException ex)
         {
-            log.warn("Error resolving NPC ID for {}", title, ex);
+            log.error("Error resolving NPC ID for {}", title, ex);
         }
         return 0;
     }

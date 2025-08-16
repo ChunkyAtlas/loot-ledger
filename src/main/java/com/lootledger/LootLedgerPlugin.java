@@ -12,13 +12,11 @@ import com.lootledger.ui.MusicWidgetController;
 import com.lootledger.ui.DropsTooltipOverlay;
 import com.lootledger.ui.TabListener;
 import lombok.extern.slf4j.Slf4j;
-import net.runelite.api.Client;
 import net.runelite.api.Item;
 import net.runelite.api.ItemContainer;
 import net.runelite.api.TileItem;
 import net.runelite.api.events.ItemContainerChanged;
 import net.runelite.api.events.ItemSpawned;
-import net.runelite.client.callback.ClientThread;
 import net.runelite.client.config.ConfigManager;
 import net.runelite.client.eventbus.EventBus;
 import net.runelite.client.eventbus.Subscribe;
@@ -43,8 +41,6 @@ import java.util.Set;
 )
 public class LootLedgerPlugin extends Plugin
 {
-    @Inject private Client client;
-    @Inject private ClientThread clientThread;
     @Inject private Gson gson;
     @Inject private ItemManager itemManager;
     @Inject private LootLedgerConfig config;
@@ -68,7 +64,6 @@ public class LootLedgerPlugin extends Plugin
         ItemIdIndex.load();
         accountManager.init();
         dropFetcher.startUp();
-        eventBus.register(this);
         eventBus.register(accountManager);
         eventBus.register(tabListener);
         eventBus.register(dropsMenuListener);

@@ -133,12 +133,12 @@ public class LootLedgerPlugin extends Plugin
         }
 
         final ObtainedItemsManager.Scope scope = mapScope(config.obtainedScope());
-        final int npcIdContext = musicWidgetController.hasData() && musicWidgetController.getCurrentData() != null
-                ? musicWidgetController.getCurrentData().getNpcId() : 0;
+        final String npcNameContext = musicWidgetController.hasData() && musicWidgetController.getCurrentData() != null
+                ? musicWidgetController.getCurrentData().getName() : "";
 
-        if (!obtainedItems.isObtained(account, npcIdContext, canonicalId, scope))
+        if (!obtainedItems.isObtained(account, npcNameContext, canonicalId, scope))
         {
-            obtainedItems.markObtained(account, npcIdContext, canonicalId, scope);
+            obtainedItems.markObtained(account, npcNameContext, canonicalId, scope);
             refreshIfShowing();
         }
     }
@@ -168,8 +168,8 @@ public class LootLedgerPlugin extends Plugin
         }
 
         final ObtainedItemsManager.Scope scope = mapScope(config.obtainedScope());
-        final int npcIdContext = musicWidgetController.hasData() && musicWidgetController.getCurrentData() != null
-                ? musicWidgetController.getCurrentData().getNpcId() : 0;
+        final String npcNameContext = musicWidgetController.hasData() && musicWidgetController.getCurrentData() != null
+                ? musicWidgetController.getCurrentData().getName() : "";
 
         for (Item item : c.getItems())
         {
@@ -180,9 +180,9 @@ public class LootLedgerPlugin extends Plugin
                 continue;
             }
 
-            if (!obtainedItems.isObtained(account, npcIdContext, canonicalId, scope))
+            if (!obtainedItems.isObtained(account, npcNameContext, canonicalId, scope))
             {
-                obtainedItems.markObtained(account, npcIdContext, canonicalId, scope);
+                obtainedItems.markObtained(account, npcNameContext, canonicalId, scope);
                 processed.add(canonicalId);
             }
         }

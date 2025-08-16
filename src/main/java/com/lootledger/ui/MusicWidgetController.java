@@ -120,7 +120,7 @@ public class MusicWidgetController
         if (account == null) { return Collections.emptySet(); }
         return obtainedItemsManager.getObtainedSet(
                 account,
-                currentDrops.getNpcId(),
+                currentDrops.getName(),
                 mapScope(config.obtainedScope())
         );
     }
@@ -455,15 +455,15 @@ public class MusicWidgetController
         if (account == null) { return; }
 
         final ObtainedItemsManager.Scope scope = mapScope(config.obtainedScope());
-        final int npcId = currentDrops.getNpcId();
-        boolean already = obtainedItemsManager.isObtained(account, npcId, itemId, scope);
+        final String npcName = currentDrops.getName();
+        boolean already = obtainedItemsManager.isObtained(account, npcName, itemId, scope);
         if (already)
         {
-            obtainedItemsManager.unmarkObtained(account, npcId, itemId, scope);
+            obtainedItemsManager.unmarkObtained(account, npcName, itemId, scope);
         }
         else
         {
-            obtainedItemsManager.markObtained(account, npcId, itemId, scope);
+            obtainedItemsManager.markObtained(account, npcName, itemId, scope);
         }
 
         // Re-render to update progress bar, opacity, and actions

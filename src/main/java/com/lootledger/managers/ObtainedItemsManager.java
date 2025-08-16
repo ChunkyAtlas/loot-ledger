@@ -59,7 +59,7 @@ public class ObtainedItemsManager
 
     public static final class AccountRecord {
         public final Set<Integer> all = Collections.synchronizedSet(new LinkedHashSet<>());
-        public final Map<Integer, Set<Integer>> npcs = Collections.synchronizedMap(new LinkedHashMap<>()); // npcId -> itemIds
+        public final Map<String, Set<Integer>> npcs = Collections.synchronizedMap(new LinkedHashMap<>()); // npcName -> itemIds
     }
 
     /** Load the current account's file into memory (creates empty file on first run). */
@@ -171,7 +171,7 @@ public class ObtainedItemsManager
         }
         // copy PER_NPC map (and wrap each set)
         if (r.npcs != null) {
-            for (Map.Entry<Integer, Set<Integer>> e : r.npcs.entrySet()) {
+            for (Map.Entry<String, Set<Integer>> e : r.npcs.entrySet()) {
                 Set<Integer> src = (e.getValue() != null) ? e.getValue() : Collections.emptySet();
                 out.npcs.put(e.getKey(), Collections.synchronizedSet(new LinkedHashSet<>(src)));
             }
@@ -189,37 +189,37 @@ public class ObtainedItemsManager
         return baseDirFor(account).resolve(FILE_NAME);
     }
 
-    public synchronized boolean isObtained(String account, int npcId, int itemId, Scope scope)
+    public synchronized boolean isObtained(String account, String npcName, int itemId, Scope scope)
     {
         AccountRecord r = data.computeIfAbsent(account, k -> new AccountRecord());
         if (scope == Scope.PER_ACCOUNT) {
             return r.all.contains(itemId);
         }
-        return r.npcs.getOrDefault(npcId, Collections.emptySet()).contains(itemId);
+        return r.npcs.getOrDefault(npcName, Collections.emptySet()).contains(itemId);
     }
 
-    public synchronized void markObtained(String account, int npcId, int itemId, Scope scope)
+    public synchronized void markObtained(String account, String npcName, int itemId, Scope scope)
     {
         AccountRecord r = data.computeIfAbsent(account, k -> new AccountRecord());
         if (scope == Scope.PER_ACCOUNT) {
             r.all.add(itemId);
         } else {
-            r.npcs.computeIfAbsent(npcId, x -> Collections.synchronizedSet(new LinkedHashSet<>())).add(itemId);
+            r.npcs.computeIfAbsent(npcName, x -> Collections.synchronizedSet(new LinkedHashSet<>())).add(itemId);
         }
         requestFlush();
     }
 
-    public synchronized void unmarkObtained(String account, int npcId, int itemId, Scope scope)
+    public synchronized void unmarkObtained(String account, String npcName, int itemId, Scope scope)
     {
         AccountRecord r = data.computeIfAbsent(account, k -> new AccountRecord());
         if (scope == Scope.PER_ACCOUNT) {
             r.all.remove(itemId);
         } else {
-            Set<Integer> set = r.npcs.get(npcId);
+            Set<Integer> set = r.npcs.get(npcName);
             if (set != null) {
                 set.remove(itemId);
                 if (set.isEmpty()) {
-                    r.npcs.remove(npcId);
+                    r.npcs.remove(npcName);
                 }
             }
         }
@@ -227,26 +227,26 @@ public class ObtainedItemsManager
     }
 
     /** Toggle obtained state; returns the new state (true if now obtained). */
-    public synchronized boolean toggleObtained(String account, int npcId, int itemId, Scope scope)
+    public synchronized boolean toggleObtained(String account, String npcName, int itemId, Scope scope)
     {
-        boolean currently = isObtained(account, npcId, itemId, scope);
+        boolean currently = isObtained(account, npcName, itemId, scope);
         if (currently) {
-            unmarkObtained(account, npcId, itemId, scope);
+            unmarkObtained(account, npcName, itemId, scope);
             return false;
         } else {
-            markObtained(account, npcId, itemId, scope);
+            markObtained(account, npcName, itemId, scope);
             return true;
         }
     }
 
-    public synchronized Set<Integer> getObtainedSet(String account, int npcId, Scope scope)
+    public synchronized Set<Integer> getObtainedSet(String account, String npcName, Scope scope)
     {
         AccountRecord r = data.computeIfAbsent(account, k -> new AccountRecord());
         Set<Integer> out = new LinkedHashSet<>();
         if (scope == Scope.PER_ACCOUNT) {
             out.addAll(r.all);
         } else {
-            out.addAll(r.npcs.getOrDefault(npcId, Collections.emptySet()));
+            out.addAll(r.npcs.getOrDefault(npcName, Collections.emptySet()));
         }
         return out;
     }

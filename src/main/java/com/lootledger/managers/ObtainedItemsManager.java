@@ -4,7 +4,6 @@ import com.google.gson.Gson;
 import com.lootledger.account.AccountManager;
 import lombok.extern.slf4j.Slf4j;
 
-import java.util.concurrent.TimeUnit;
 import javax.inject.Inject;
 import javax.inject.Singleton;
 import java.io.BufferedWriter;
@@ -166,15 +165,11 @@ public class ObtainedItemsManager
         AccountRecord out = new AccountRecord();
         if (r == null) return out;
         // copy PER_ACCOUNT set
-        if (r.all != null) {
-            out.all.addAll(r.all);
-        }
+        out.all.addAll(r.all);
         // copy PER_NPC map (and wrap each set)
-        if (r.npcs != null) {
-            for (Map.Entry<String, Set<Integer>> e : r.npcs.entrySet()) {
-                Set<Integer> src = (e.getValue() != null) ? e.getValue() : Collections.emptySet();
-                out.npcs.put(e.getKey(), Collections.synchronizedSet(new LinkedHashSet<>(src)));
-            }
+        for (Map.Entry<String, Set<Integer>> e : r.npcs.entrySet()) {
+            Set<Integer> src = (e.getValue() != null) ? e.getValue() : Collections.emptySet();
+            out.npcs.put(e.getKey(), Collections.synchronizedSet(new LinkedHashSet<>(src)));
         }
         return out;
     }
@@ -251,35 +246,10 @@ public class ObtainedItemsManager
         return out;
     }
 
-    public void shutdown()
-    {
-        // flush any pending debounced writes
+    public void shutdown() {
         final ScheduledFuture<?> pf = pendingFlush;
         if (pf != null) { pf.cancel(false); }
-
-        // final synchronous save so we don't lose anything
-        final String account = accountManager.getPlayerName();
-        if (account != null && !account.isEmpty())
-        {
-            save(); // enqueues to io; we'll await termination below
-        }
-
-        // stop scheduler first so no new tasks get queued
         scheduler.shutdown();
-
         io.shutdown();
-        try
-        {
-            if (!io.awaitTermination(3, TimeUnit.SECONDS))
-            {
-                io.shutdownNow();
-                io.awaitTermination(2, TimeUnit.SECONDS);
-            }
-        }
-        catch (InterruptedException ie)
-        {
-            io.shutdownNow();
-            Thread.currentThread().interrupt();
-        }
     }
 }

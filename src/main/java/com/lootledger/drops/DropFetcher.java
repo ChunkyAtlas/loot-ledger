@@ -55,6 +55,7 @@ public class DropFetcher
      */
     public CompletableFuture<NpcDropData> fetch(int npcId, String name, int level)
     {
+        ensureExecutor();
         return CompletableFuture.supplyAsync(() -> {
             String url = buildWikiUrl(npcId, name);
             String html = fetchHtml(url);
@@ -83,8 +84,7 @@ public class DropFetcher
                 // Resolve item IDs on client thread via ItemManager + Items.json index
                 for (DropTableSection sec : data.getDropTableSections()) {
                     List<DropItem> items = sec.getItems();
-                    for (int i = 0; i < items.size(); i++) {
-                        DropItem d = items.get(i);
+                    for (DropItem d : items) {
                         String itemName = d.getName();
                         d.setItemId(resolveItemId(itemName));
                     }
@@ -107,7 +107,7 @@ public class DropFetcher
             return 0;
         }
 
-        // 1) Try Items.json index (handles non-tradeables)
+        // try Items.json index (handles non-tradeables)
         int[] candidates = ItemIdIndex.findIdsFlex(itemName);
         if (candidates.length > 0) {
             int best = ItemIdIndex.pickBestId(itemManager, candidates);
@@ -116,18 +116,18 @@ public class DropFetcher
             }
         }
 
-        // 2) Fallback to ItemManager.search (tradeables only)
+        // fallback to ItemManager.search (tradeables only)
         try {
             List<ItemPrice> results = itemManager.search(itemName);
-            for (int j = 0; j < results.size(); j++) {
-                int id = results.get(j).getId();
+            for (ItemPrice result : results) {
+                int id = result.getId();
                 ItemComposition comp = itemManager.getItemComposition(id);
-                if (comp != null && comp.getName() != null && comp.getName().equalsIgnoreCase(itemName)) {
+                if (comp.getName() != null && comp.getName().equalsIgnoreCase(itemName)) {
                     return itemManager.canonicalize(id);
                 }
             }
         } catch (Exception ex) {
-            log.warn("ItemManager search failed for {}", itemName, ex);
+            // Ignore
         }
 
         return 0;
@@ -191,7 +191,7 @@ public class DropFetcher
                     String txt = td.text();
                     String[] parts = txt.split("[^0-9]+");
                     for (String part : parts) {
-                        if (part != null && part.length() > 0) {
+                        if (part != null && !part.isEmpty()) {
                             try {
                                 return Integer.parseInt(part);
                             } catch (NumberFormatException nfe) {
@@ -232,6 +232,7 @@ public class DropFetcher
                 return 0;
             }
 
+            assert res.body() != null;
             String body = res.body().string();
             JsonElement root = new JsonParser().parse(body);
             JsonElement pages = root.getAsJsonObject()
@@ -268,6 +269,7 @@ public class DropFetcher
             if (!res.isSuccessful()) {
                 throw new IOException("HTTP " + res.code());
             }
+            assert res.body() != null;
             String body = res.body().string();
             JsonArray arr = new JsonParser().parse(body).getAsJsonArray();
             JsonArray titles = arr.get(1).getAsJsonArray();
@@ -309,6 +311,7 @@ public class DropFetcher
             if (!res.isSuccessful()) {
                 throw new IOException("HTTP " + res.code());
             }
+            assert res.body() != null;
             return res.body().string();
         }
         catch (IOException ex)
@@ -323,19 +326,29 @@ public class DropFetcher
         if (fetchExecutor == null || fetchExecutor.isShutdown() || fetchExecutor.isTerminated())
         {
             fetchExecutor = Executors.newFixedThreadPool(
-                    4,
-                    new ThreadFactoryBuilder().setNameFormat("dropfetch-%d").build()
+                    4, new ThreadFactoryBuilder().setNameFormat("dropfetch-%d").setDaemon(true).build()
             );
         }
     }
 
-    /** Shut down the executor service. */
+    /** Shut down the executor service (non-blocking, graceful). */
     public void shutdown()
     {
         if (fetchExecutor != null)
         {
-            fetchExecutor.shutdownNow();
+            fetchExecutor.shutdown();
             fetchExecutor = null;
+        }
+    }
+
+    /** Ensure we have a usable executor before submitting async work. */
+    private synchronized void ensureExecutor()
+    {
+        if (fetchExecutor == null || fetchExecutor.isShutdown() || fetchExecutor.isTerminated())
+        {
+            fetchExecutor = Executors.newFixedThreadPool(
+                    4, new ThreadFactoryBuilder().setNameFormat("dropfetch-%d").setDaemon(true).build()
+            );
         }
     }
 }

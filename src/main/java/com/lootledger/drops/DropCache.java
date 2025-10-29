@@ -429,25 +429,8 @@ public class DropCache
         }
     }
 
-    public void shutdown()
-    {
+    public void shutdown() {
         ioExecutor.shutdown();
-        try
-        {
-            if (!ioExecutor.awaitTermination(3, TimeUnit.SECONDS))
-            {
-                ioExecutor.shutdownNow();
-                if (!ioExecutor.awaitTermination(2, TimeUnit.SECONDS))
-                {
-                    log.warn("dropcache-io executor did not terminate cleanly");
-                }
-            }
-        }
-        catch (InterruptedException ie)
-        {
-            ioExecutor.shutdownNow();
-            Thread.currentThread().interrupt();
-        }
     }
 
 

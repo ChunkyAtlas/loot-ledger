@@ -8,13 +8,15 @@ import com.lootledger.drops.DropFetcher;
 import com.lootledger.items.ItemIdIndex;
 import com.lootledger.managers.ObtainedItemsManager;
 import com.lootledger.ui.DropsMenuListener;
-import com.lootledger.ui.MusicWidgetController;
 import com.lootledger.ui.DropsTooltipOverlay;
+import com.lootledger.ui.MusicWidgetController;
 import com.lootledger.ui.TabListener;
 import lombok.extern.slf4j.Slf4j;
+import net.runelite.api.GameState;
 import net.runelite.api.Item;
 import net.runelite.api.ItemContainer;
 import net.runelite.api.TileItem;
+import net.runelite.api.events.GameStateChanged;
 import net.runelite.api.events.ItemContainerChanged;
 import net.runelite.api.events.ItemSpawned;
 import net.runelite.client.config.ConfigManager;
@@ -25,9 +27,6 @@ import net.runelite.client.game.ItemManager;
 import net.runelite.client.plugins.Plugin;
 import net.runelite.client.plugins.PluginDescriptor;
 import net.runelite.client.ui.overlay.OverlayManager;
-import net.runelite.api.GameState;
-import net.runelite.api.events.GameStateChanged;
-
 
 import javax.inject.Inject;
 import java.util.HashSet;
@@ -37,7 +36,7 @@ import java.util.Set;
 @PluginDescriptor(
         name = "Loot Ledger",
         description = "Show drop tables in the Music tab with obtained tracking",
-        tags = {"drops","loot","wiki"}
+        tags = {"drops", "loot", "wiki"}
 )
 public class LootLedgerPlugin extends Plugin
 {
@@ -56,29 +55,43 @@ public class LootLedgerPlugin extends Plugin
     @Inject private DropsTooltipOverlay dropsTooltipOverlay;
 
     @Provides
-    LootLedgerConfig provideConfig(ConfigManager cm) { return cm.getConfig(LootLedgerConfig.class); }
+    LootLedgerConfig provideConfig(ConfigManager cm)
+    {
+        return cm.getConfig(LootLedgerConfig.class);
+    }
 
-    @Override protected void startUp()
+    @Override
+    protected void startUp()
     {
         ItemIdIndex.setGson(gson);
         ItemIdIndex.load();
+
         accountManager.init();
         dropFetcher.startUp();
+
         eventBus.register(accountManager);
         eventBus.register(tabListener);
         eventBus.register(dropsMenuListener);
+        eventBus.register(musicWidgetController); // <-- needed for WidgetLoaded handler
+
         overlayManager.add(dropsTooltipOverlay);
     }
 
-    @Override protected void shutDown()
+    @Override
+    protected void shutDown()
     {
         musicWidgetController.restore();
+
         obtainedItems.save();
         obtainedItems.shutdown();
+
         eventBus.unregister(accountManager);
         eventBus.unregister(tabListener);
         eventBus.unregister(dropsMenuListener);
+        eventBus.unregister(musicWidgetController); // <-- unregister to match startUp
+
         overlayManager.remove(dropsTooltipOverlay);
+
         dropCache.shutdown();
         dropFetcher.shutdown();
     }
@@ -101,13 +114,20 @@ public class LootLedgerPlugin extends Plugin
         {
             return;
         }
-        // Any of these affect visibility/ordering of items; re-render if open
+
         String k = e.getKey();
+
+        // RDT/Gem toggles affect the underlying drop tables -> clear caches then refresh
+        if ("showRareDropTable".equals(k) || "showGemDropTable".equals(k))
+        {
+            dropCache.clearAllCaches();
+            refreshIfShowing();
+            return;
+        }
+
         if ("trackObtained".equals(k)
                 || "obtainedScope".equals(k)
                 || "obtainedView".equals(k)
-                || "showRareDropTable".equals(k)
-                || "showGemDropTable".equals(k)
                 || "sortDropsByRarity".equals(k))
         {
             refreshIfShowing();
@@ -134,7 +154,8 @@ public class LootLedgerPlugin extends Plugin
 
         final ObtainedItemsManager.Scope scope = mapScope(config.obtainedScope());
         final String npcNameContext = musicWidgetController.hasData() && musicWidgetController.getCurrentData() != null
-                ? musicWidgetController.getCurrentData().getName() : "";
+                ? musicWidgetController.getCurrentData().getName()
+                : "";
 
         if (!obtainedItems.isObtained(account, npcNameContext, canonicalId, scope))
         {
@@ -169,11 +190,13 @@ public class LootLedgerPlugin extends Plugin
 
         final ObtainedItemsManager.Scope scope = mapScope(config.obtainedScope());
         final String npcNameContext = musicWidgetController.hasData() && musicWidgetController.getCurrentData() != null
-                ? musicWidgetController.getCurrentData().getName() : "";
+                ? musicWidgetController.getCurrentData().getName()
+                : "";
 
         for (Item item : c.getItems())
         {
             if (item == null) continue;
+
             final int canonicalId = itemManager.canonicalize(item.getId());
             if (processed.contains(canonicalId))
             {
@@ -203,8 +226,8 @@ public class LootLedgerPlugin extends Plugin
 
     private ObtainedItemsManager.Scope mapScope(LootLedgerConfig.Scope s)
     {
-        return s == LootLedgerConfig.Scope.PER_NPC ?
-                ObtainedItemsManager.Scope.PER_NPC :
-                ObtainedItemsManager.Scope.PER_ACCOUNT;
+        return s == LootLedgerConfig.Scope.PER_NPC
+                ? ObtainedItemsManager.Scope.PER_NPC
+                : ObtainedItemsManager.Scope.PER_ACCOUNT;
     }
 }

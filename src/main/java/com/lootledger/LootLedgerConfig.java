@@ -56,4 +56,12 @@ public interface LootLedgerConfig extends Config
             position = 12
     )
     default boolean sortDropsByRarity() { return true; }
+
+    @ConfigItem(
+            keyName = "showDropsAlwaysOpen",
+            name = "Show Drops Always Open",
+            description = "Keep the Show Drops view active when switching away from the Music tab. Use the close button to exit.",
+            position = 13
+    )
+    default boolean showDropsAlwaysOpen() { return true; }
 }

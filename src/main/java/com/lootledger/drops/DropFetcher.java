@@ -35,7 +35,7 @@ import java.util.concurrent.*;
 @Singleton
 public class DropFetcher
 {
-    private static final String USER_AGENT = "RuneLite-LootLedger/1.1.1";
+    private static final String USER_AGENT = "RuneLite-LootLedger/1.1.2";
 
     private final OkHttpClient httpClient;
     private final ItemManager itemManager;
